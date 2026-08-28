@@ -1,127 +1,572 @@
 <!DOCTYPE html>
 <html lang="my">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Myanmar Text to Voice</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<style>
-body {
-    margin: 0;
-    background: #f5f5f5;
-    font-family: Arial, sans-serif;
-}
+    <title>Myanmar Text to Voice</title>
 
-.container {
-    max-width: 600px;
-    margin: 30px auto;
-    background: white;
-    padding: 30px;
-    border-radius: 25px;
-}
+    <style>
+        * {
+            box-sizing: border-box;
+        }
 
-h1 {
-    text-align: center;
-    font-size: 38px;
-}
+        body {
+            margin: 0;
+            font-family:
+                Arial,
+                "Noto Sans Myanmar",
+                sans-serif;
+            background: #f5f6f8;
+            color: #171717;
+            transition: 0.3s;
+        }
 
-textarea {
-    width: 100%;
-    height: 300px;
-    box-sizing: border-box;
-    padding: 16px;
-    font-size: 20px;
-    border: 2px solid #aaa;
-    border-radius: 15px;
-    resize: vertical;
-}
+        body.dark {
+            background: #101114;
+            color: #f4f4f4;
+        }
 
-label {
-    display: block;
-    margin-top: 20px;
-    font-size: 18px;
-}
+        .container {
+            width: 100%;
+            max-width: 720px;
+            margin: auto;
+            padding: 18px;
+        }
 
-select,
-input {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 15px;
-    margin-top: 8px;
-    font-size: 18px;
-    border: 2px solid #aaa;
-    border-radius: 12px;
-}
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 18px;
+        }
 
-button {
-    width: 100%;
-    margin-top: 25px;
-    padding: 16px;
-    font-size: 20px;
-    border: none;
-    border-radius: 12px;
-    background: #222;
-    color: white;
-}
+        .logo {
+            font-size: 25px;
+            font-weight: 800;
+        }
 
-button:active {
-    transform: scale(0.98);
-}
+        .dark-btn {
+            border: 0;
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            font-size: 21px;
+            background: #222;
+            color: white;
+            cursor: pointer;
+        }
 
-.footer {
-    text-align: center;
-    margin-top: 25px;
-    font-size: 16px;
-}
-</style>
+        .card {
+            background: white;
+            border-radius: 24px;
+            padding: 20px;
+            box-shadow:
+                0 8px 30px rgba(0,0,0,0.08);
+        }
+
+        body.dark .card {
+            background: #1a1c21;
+            box-shadow:
+                0 8px 30px rgba(0,0,0,0.35);
+        }
+
+        h1 {
+            margin: 0 0 6px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            margin: 0 0 20px;
+            color: #777;
+            font-size: 14px;
+        }
+
+        body.dark .subtitle {
+            color: #aaa;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 260px;
+            resize: vertical;
+            border: 2px solid #d7d7d7;
+            border-radius: 18px;
+            padding: 17px;
+            font-size: 18px;
+            line-height: 1.7;
+            outline: none;
+            background: white;
+            color: #111;
+        }
+
+        textarea:focus {
+            border-color: #111;
+        }
+
+        body.dark textarea {
+            background: #111318;
+            color: white;
+            border-color: #3b3e46;
+        }
+
+        .counter {
+            text-align: right;
+            margin-top: 7px;
+            color: #777;
+            font-size: 13px;
+        }
+
+        .section {
+            margin-top: 18px;
+        }
+
+        .label {
+            display: block;
+            font-weight: 700;
+            margin-bottom: 8px;
+            font-size: 15px;
+        }
+
+        select,
+        input {
+            width: 100%;
+            height: 52px;
+            border-radius: 14px;
+            border: 2px solid #d7d7d7;
+            padding: 0 14px;
+            font-size: 16px;
+            outline: none;
+            background: white;
+            color: #111;
+        }
+
+        body.dark select,
+        body.dark input {
+            background: #111318;
+            color: white;
+            border-color: #3b3e46;
+        }
+
+        .row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .generate {
+            width: 100%;
+            height: 58px;
+            margin-top: 22px;
+            border: 0;
+            border-radius: 17px;
+            background: #181818;
+            color: white;
+            font-size: 17px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .generate:active {
+            transform: scale(0.98);
+        }
+
+        body.dark .generate {
+            background: white;
+            color: #111;
+        }
+
+        .error {
+            margin-top: 16px;
+            padding: 13px;
+            border-radius: 13px;
+            background: #ffe5e5;
+            color: #b00020;
+            font-size: 14px;
+        }
+
+        .result {
+            margin-top: 20px;
+            padding: 17px;
+            border-radius: 18px;
+            background: #f1f2f4;
+        }
+
+        body.dark .result {
+            background: #111318;
+        }
+
+        .result-title {
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        audio {
+            width: 100%;
+            margin-top: 5px;
+        }
+
+        .download {
+            display: block;
+            width: 100%;
+            text-align: center;
+            text-decoration: none;
+            margin-top: 12px;
+            padding: 14px;
+            border-radius: 13px;
+            background: #222;
+            color: white;
+            font-weight: 700;
+        }
+
+        body.dark .download {
+            background: white;
+            color: #111;
+        }
+
+        .hint {
+            text-align: center;
+            margin-top: 18px;
+            color: #888;
+            font-size: 12px;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 15px;
+            font-size: 14px;
+            color: #777;
+        }
+
+        @media (max-width: 480px) {
+
+            .container {
+                padding: 12px;
+            }
+
+            .card {
+                padding: 15px;
+                border-radius: 20px;
+            }
+
+            h1 {
+                font-size: 24px;
+            }
+
+            textarea {
+                min-height: 230px;
+                font-size: 17px;
+            }
+
+            .row {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
 </head>
 
 <body>
 
 <div class="container">
 
-<h1>🇲🇲 Myanmar<br>Text to Voice</h1>
+    <div class="topbar">
 
-<form method="POST">
+        <div class="logo">
+            🎙️ Myanmar TTS
+        </div>
 
-<textarea
-name="text"
-placeholder="မြန်မာစာကို ဤမှာထည့်ပါ..."
-required></textarea>
+        <button
+            class="dark-btn"
+            onclick="toggleDark()"
+            id="darkButton">
+            🌙
+        </button>
 
-<label>Voice</label>
+    </div>
 
-<select name="voice">
 
-<option value="my-MM-NilarNeural">
-🇲🇲 Myanmar Female - Nilar
-</option>
+    <div class="card">
 
-<option value="my-MM-ThihaNeural">
-🇲🇲 Myanmar Male - Thiha
-</option>
+        <h1>Text to Voice</h1>
 
-</select>
+        <p class="subtitle">
+            မြန်မာစာကို သဘာဝကျတဲ့အသံနဲ့ MP3 ပြောင်းပါ
+        </p>
 
-<label>File Name</label>
 
-<input
-type="text"
-name="filename"
-value="myanmar-voice"
-placeholder="ဖိုင်နာမည်ထည့်ပါ">
+        <form
+            method="POST"
+            onsubmit="showLoading()">
 
-<button type="submit">
-🔊 အသံကြောင်းမယ်
-</button>
 
-</form>
+            <label class="label">
+                📝 စာသား
+            </label>
 
-<div class="footer">
-edge-tts Myanmar Neural Voice
+            <textarea
+                name="text"
+                id="text"
+                maxlength="50000"
+                placeholder="မြန်မာစာကို ဒီနေရာမှာ ရိုက်ပါ..."
+                oninput="updateCount()">{{ text }}</textarea>
+
+            <div class="counter">
+                <span id="count">0</span> / 50,000 စာလုံး
+            </div>
+
+
+            <div class="section">
+
+                <label class="label">
+                    🎙️ Voice
+                </label>
+
+                <select name="voice">
+
+                    <option
+                        value="nilar"
+                        {% if voice == "nilar" %}selected{% endif %}>
+                        🇲🇲 Nilar — Female
+                    </option>
+
+                    <option
+                        value="thiha"
+                        {% if voice == "thiha" %}selected{% endif %}>
+                        🇲🇲 Thiha — Male
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <div class="section">
+
+                <div class="row">
+
+                    <div>
+
+                        <label class="label">
+                            ⚡ Speed
+                        </label>
+
+                        <select name="speed">
+
+                            <option
+                                value="slow"
+                                {% if speed == "slow" %}selected{% endif %}>
+                                🐢 နှေး
+                            </option>
+
+                            <option
+                                value="normal"
+                                {% if speed == "normal" %}selected{% endif %}>
+                                ▶️ ပုံမှန်
+                            </option>
+
+                            <option
+                                value="fast"
+                                {% if speed == "fast" %}selected{% endif %}>
+                                🚀 မြန်
+                            </option>
+
+                        </select>
+
+                    </div>
+
+
+                    <div>
+
+                        <label class="label">
+                            🎚️ Pitch
+                        </label>
+
+                        <select name="pitch">
+
+                            <option
+                                value="low"
+                                {% if pitch == "low" %}selected{% endif %}>
+                                🔽 အသံနိမ့်
+                            </option>
+
+                            <option
+                                value="normal"
+                                {% if pitch == "normal" %}selected{% endif %}>
+                                ➖ ပုံမှန်
+                            </option>
+
+                            <option
+                                value="high"
+                                {% if pitch == "high" %}selected{% endif %}>
+                                🔼 အသံမြင့်
+                            </option>
+
+                        </select>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <div class="section">
+
+                <label class="label">
+                    📁 File Name
+                </label>
+
+                <input
+                    type="text"
+                    name="filename"
+                    value="{{ filename }}"
+                    placeholder="myanmar-voice">
+
+            </div>
+
+
+            <button
+                type="submit"
+                class="generate">
+
+                🔊 အသံထုတ်မယ်
+
+            </button>
+
+
+            <div
+                class="loading"
+                id="loading">
+
+                ⏳ အသံဖိုင် ပြုလုပ်နေပါတယ်...
+                စာရှည်ရင် အချိန်အနည်းငယ်ကြာနိုင်ပါတယ်။
+
+            </div>
+
+        </form>
+
+
+        {% if error %}
+
+        <div class="error">
+            ❌ {{ error }}
+        </div>
+
+        {% endif %}
+
+
+        {% if audio_file %}
+
+        <div class="result">
+
+            <div class="result-title">
+                🎉 အသံဖိုင် အသင့်ဖြစ်ပါပြီ
+            </div>
+
+            <audio
+                controls
+                autoplay
+                src="{{ url_for('audio', filename=audio_file) }}">
+            </audio>
+
+            <a
+                class="download"
+                href="{{ url_for('download', filename=audio_file) }}">
+
+                📥 MP3 သိမ်းမယ်
+
+            </a>
+
+        </div>
+
+        {% endif %}
+
+
+        <div class="hint">
+            Myanmar Female — Nilar &nbsp;|&nbsp;
+            Myanmar Male — Thiha
+        </div>
+
+    </div>
+
 </div>
 
-</div>
+
+<script>
+
+    function updateCount() {
+
+        const text =
+            document.getElementById("text");
+
+        const count =
+            document.getElementById("count");
+
+        count.textContent =
+            text.value.length.toLocaleString();
+
+    }
+
+
+    function showLoading() {
+
+        const text =
+            document.getElementById("text").value.trim();
+
+        if (!text) {
+            return;
+        }
+
+        document.getElementById("loading")
+            .style.display = "block";
+    }
+
+
+    function toggleDark() {
+
+        document.body.classList.toggle("dark");
+
+        const button =
+            document.getElementById("darkButton");
+
+        if (
+            document.body.classList.contains("dark")
+        ) {
+            button.textContent = "☀️";
+            localStorage.setItem(
+                "darkMode",
+                "on"
+            );
+        } else {
+            button.textContent = "🌙";
+            localStorage.setItem(
+                "darkMode",
+                "off"
+            );
+        }
+    }
+
+
+    window.onload = function () {
+
+        updateCount();
+
+        if (
+            localStorage.getItem("darkMode")
+            === "on"
+        ) {
+
+            document.body.classList.add("dark");
+
+            document.getElementById(
+                "darkButton"
+            ).textContent = "☀️";
+        }
+
+    };
+
+</script>
 
 </body>
 </html>

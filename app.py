@@ -1,226 +1,249 @@
-from flask import Flask, render_template, request, send_file
-from youtube_transcript_api import YouTubeTranscriptApi
-from deep_translator import GoogleTranslator
+from flask import Flask, render_template, request, send_from_directory
 import edge_tts
 import asyncio
-import subprocess
 import os
 import re
+import uuid
+import subprocess
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 
-def get_video_id(url):
-    patterns = [
-        r"(?:v=|youtu\.be/|youtube\.com/shorts/)([A-Za-z0-9_-]{11})"
-    ]
+OUTPUT_DIR = "static/audio"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    for pattern in patterns:
-        match = re.search(pattern, url)
-        if match:
-            return match.group(1)
+VOICES = {
+    "nilar": "my-MM-NilarNeural",
+    "thiha": "my-MM-ThihaNeural"
+}
 
-    return None
+SPEEDS = {
+    "slow": "-20%",
+    "normal": "+0%",
+    "fast": "+20%"
+}
 
-
-def get_transcript(video_id):
-    api = YouTubeTranscriptApi()
-
-    try:
-        transcript = api.fetch(
-            video_id,
-            languages=["my", "en"]
-        )
-
-        return "\n".join(
-            item.text for item in transcript
-        )
-
-    except Exception:
-        transcript = api.list(video_id)
-
-        for t in transcript:
-            if t.language_code.startswith("en"):
-                data = t.fetch()
-                return "\n".join(item.text for item in data)
-
-        for t in transcript:
-            data = t.fetch()
-            return "\n".join(item.text for item in data)
-
-    return ""
+PITCHES = {
+    "low": "-10Hz",
+    "normal": "+0Hz",
+    "high": "+10Hz"
+}
 
 
-def translate_to_myanmar(text):
-    translator = GoogleTranslator(
-        source="auto",
-        target="my"
-    )
+def split_text(text, max_length=2500):
+    text = text.strip()
 
-    chunks = []
+    if len(text) <= max_length:
+        return [text]
+
+    sentences = re.split(r"(?<=[။.!?])\s*", text)
+
+    parts = []
     current = ""
 
-    for line in text.splitlines():
-        if len(current) + len(line) > 3000:
-            if current:
-                chunks.append(current)
-            current = line
+    for sentence in sentences:
+        sentence = sentence.strip()
+
+        if not sentence:
+            continue
+
+        if len(current) + len(sentence) + 1 <= max_length:
+            current += sentence + " "
         else:
-            current += "\n" + line
+            if current:
+                parts.append(current.strip())
+
+            current = sentence + " "
 
     if current:
-        chunks.append(current)
+        parts.append(current.strip())
 
-    result = []
-
-    for chunk in chunks:
-        try:
-            translated = translator.translate(chunk)
-            result.append(translated)
-        except Exception:
-            result.append(chunk)
-
-    return "\n".join(result)
+    return parts
 
 
-async def make_voice(text, voice, output):
-    communicate = edge_tts.Communicate(text, voice)
+async def make_voice(text, voice, output, rate, pitch):
+    communicate = edge_tts.Communicate(
+        text,
+        voice,
+        rate=rate,
+        pitch=pitch
+    )
+
     await communicate.save(output)
+
+
+def create_audio(text, voice, rate, pitch, output_path):
+    parts = split_text(text)
+
+    temp_files = []
+
+    try:
+        if len(parts) == 1:
+            asyncio.run(
+                make_voice(
+                    parts[0],
+                    voice,
+                    output_path,
+                    rate,
+                    pitch
+                )
+            )
+            return
+
+        for index, part in enumerate(parts):
+            temp_name = f"temp_{uuid.uuid4().hex}_{index}.mp3"
+            temp_path = os.path.join(OUTPUT_DIR, temp_name)
+
+            asyncio.run(
+                make_voice(
+                    part,
+                    voice,
+                    temp_path,
+                    rate,
+                    pitch
+                )
+            )
+
+            temp_files.append(temp_path)
+
+        list_file = os.path.join(
+            OUTPUT_DIR,
+            f"concat_{uuid.uuid4().hex}.txt"
+        )
+
+        with open(list_file, "w", encoding="utf-8") as f:
+            for file in temp_files:
+                f.write(
+                    "file '{}'\n".format(
+                        os.path.abspath(file).replace("'", "'\\''")
+                    )
+                )
+
+        command = [
+            "ffmpeg",
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            list_file,
+            "-c",
+            "copy",
+            output_path
+        ]
+
+        result = subprocess.run(
+            command,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr)
+
+    finally:
+        for file in temp_files:
+            if os.path.exists(file):
+                os.remove(file)
+
+        if "list_file" in locals() and os.path.exists(list_file):
+            os.remove(list_file)
 
 
 @app.route("/", methods=["GET", "POST"])
 def home():
 
-    transcript = ""
-    translated = ""
+    text = ""
+    voice_key = "nilar"
+    speed = "normal"
+    pitch = "normal"
+    filename = "myanmar-voice"
+    audio_file = None
     error = ""
 
     if request.method == "POST":
 
-        action = request.form.get("action", "")
         text = request.form.get("text", "").strip()
-        youtube_url = request.form.get("youtube_url", "").strip()
+        voice_key = request.form.get("voice", "nilar")
+        speed = request.form.get("speed", "normal")
+        pitch = request.form.get("pitch", "normal")
+        filename = request.form.get(
+            "filename",
+            "myanmar-voice"
+        ).strip()
 
-        # YouTube Transcript
-        if action == "transcript":
+        if not text:
+            error = "စာသားထည့်ပေးပါ။"
 
-            if not youtube_url:
-                error = "YouTube Link ထည့်ပေးပါ"
-                return render_template(
-                    "index.html",
-                    transcript=transcript,
-                    translated=translated,
-                    error=error
-                )
+        elif voice_key not in VOICES:
+            error = "အသံရွေးချယ်မှု မမှန်ပါ။"
 
-            video_id = get_video_id(youtube_url)
+        elif speed not in SPEEDS:
+            error = "Speed ရွေးချယ်မှု မမှန်ပါ။"
 
-            if not video_id:
-                error = "YouTube Link မမှန်ပါ"
-                return render_template(
-                    "index.html",
-                    transcript=transcript,
-                    translated=translated,
-                    error=error
-                )
+        elif pitch not in PITCHES:
+            error = "Pitch ရွေးချယ်မှု မမှန်ပါ။"
+
+        else:
+
+            filename = secure_filename(filename)
+
+            if not filename:
+                filename = "myanmar-voice"
+
+            output_name = filename + ".mp3"
+            output_path = os.path.join(
+                OUTPUT_DIR,
+                output_name
+            )
 
             try:
-                transcript = get_transcript(video_id)
-
-                if not transcript:
-                    error = "Transcript မတွေ့ပါ"
-            except Exception as e:
-                error = "Transcript ရယူလို့မရပါ: " + str(e)
-
-            return render_template(
-                "index.html",
-                transcript=transcript,
-                translated=translated,
-                error=error
-            )
-
-        # Myanmar Translation
-        if action == "translate":
-
-            text = request.form.get("text", "").strip()
-
-            if not text:
-                error = "Transcript စာသားထည့်ပေးပါ"
-            else:
-                try:
-                    translated = translate_to_myanmar(text)
-                except Exception as e:
-                    error = "ဘာသာပြန်ရာမှာ Error ဖြစ်ပါတယ်: " + str(e)
-
-            return render_template(
-                "index.html",
-                transcript=text,
-                translated=translated,
-                error=error
-            )
-
-        # Text to Voice
-        if action == "voice":
-
-            text = request.form.get("text", "").strip()
-            voice = request.form.get(
-                "voice",
-                "my-MM-NilarNeural"
-            )
-
-            filename = request.form.get(
-                "filename",
-                "myanmar-voice"
-            ).strip()
-
-            if not text:
-                return render_template(
-                    "index.html",
-                    transcript=transcript,
-                    translated=translated,
-                    error="အသံထုတ်မယ့်စာသားထည့်ပေးပါ"
+                create_audio(
+                    text,
+                    VOICES[voice_key],
+                    SPEEDS[speed],
+                    PITCHES[pitch],
+                    output_path
                 )
 
-            raw_output = "raw.mp3"
-            output = filename + ".mp3"
-
-            try:
-                asyncio.run(
-                    make_voice(
-                        text,
-                        voice,
-                        raw_output
-                    )
-                )
-
-                subprocess.run([
-                    "ffmpeg",
-                    "-y",
-                    "-i",
-                    raw_output,
-                    "-ar",
-                    "24000",
-                    "-ac",
-                    "1",
-                    "-b:a",
-                    "128k",
-                    output
-                ], check=True, stdout=subprocess.DEVNULL)
-
-                return send_file(
-                    output,
-                    as_attachment=True,
-                    download_name=output,
-                    mimetype="audio/mpeg"
-                )
+                if os.path.exists(output_path):
+                    audio_file = output_name
+                else:
+                    error = "အသံဖိုင် မထုတ်နိုင်ပါ။"
 
             except Exception as e:
-                error = "အသံထုတ်ရာမှာ Error ဖြစ်ပါတယ်: " + str(e)
+                error = "အသံထုတ်ရာတွင် Error ဖြစ်နေပါတယ်။"
+                print("ERROR:", e)
 
     return render_template(
         "index.html",
-        transcript=transcript,
-        translated=translated,
+        text=text,
+        voice=voice_key,
+        speed=speed,
+        pitch=pitch,
+        filename=filename,
+        audio_file=audio_file,
         error=error
+    )
+
+
+@app.route("/audio/<filename>")
+def audio(filename):
+    return send_from_directory(
+        OUTPUT_DIR,
+        filename,
+        as_attachment=False
+    )
+
+
+@app.route("/download/<filename>")
+def download(filename):
+    return send_from_directory(
+        OUTPUT_DIR,
+        filename,
+        as_attachment=True
     )
 
 
@@ -228,5 +251,5 @@ if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
         port=5000,
-        debug=True
+        debug=False
     )
